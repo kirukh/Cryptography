@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+
+# Build-Artefakte
+vendor/liboqs/build/
+vendor/liboqs-python/build/
+vendor/xmss-reference/
+
+# Benchmark-Output
+results/*.csv
+results/*.json
+results/*.png
+!results/.gitkeep
+
+# Editor
+.vscode/
+.idea/
+*.swp

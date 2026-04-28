@@ -1,0 +1,14 @@
+# Python-Bindings fuer liboqs (Open Quantum Safe).
+# Wir installieren liboqs-python aus dem Quellcode (siehe README.md),
+# damit wir die XMSS-Stateful-Sigs aktivieren koennen.
+# Daher hier KEIN liboqs-python aus PyPI - das wuerde einen Build ohne
+# XMSS-Support einziehen.
+
+# Benchmark / Auswertung
+numpy>=1.26
+pandas>=2.2
+matplotlib>=3.8
+
+# Komfort
+tabulate>=0.9
+psutil>=5.9

@@ -13,7 +13,7 @@ import sys
 
 from .algorithms import (
     MLDSAScheme,
-    SPHINCSScheme,
+    SLHDSAScheme,
     XMSSScheme,
     XMSSNotEnabledError,
 )
@@ -43,6 +43,8 @@ def test_scheme(scheme, label: str) -> bool:
         print("ok" if valid else "FEHLGESCHLAGEN")
 
         # Negativtest: manipulierte Nachricht muss ungueltig sein
+        # ACHTUNG: Bei XMSS erhoeht das den Index-Verbrauch nicht, weil
+        # verify() nur den Public Key braucht.
         print("  -> negativ-verify ...", end=" ")
         invalid = scheme.verify(kp.public_key, message + b"!", signature)
         print("ok" if not invalid else "FEHLGESCHLAGEN (haette false sein muessen!)")
@@ -65,16 +67,16 @@ def main() -> int:
     # ML-DSA
     results["ML-DSA-65"] = test_scheme(MLDSAScheme("ML-DSA-65"), "ML-DSA-65")
 
-    # SPHINCS+
+    # SLH-DSA (vormals SPHINCS+)
     try:
-        results["SPHINCS+-128f"] = test_scheme(
-            SPHINCSScheme("SPHINCS+-128f"), "SPHINCS+-128f"
+        results["SLH-DSA-SHA2-128f"] = test_scheme(
+            SLHDSAScheme("SLH-DSA-SHA2-128f"), "SLH-DSA-SHA2-128f"
         )
     except Exception as e:
-        print(f"\nSPHINCS+ konnte nicht initialisiert werden: {e}")
-        results["SPHINCS+-128f"] = False
+        print(f"\nSLH-DSA konnte nicht initialisiert werden: {e}")
+        results["SLH-DSA-SHA2-128f"] = False
 
-    # XMSS - hier kann der "nicht enabled"-Fall auftreten
+    # XMSS
     try:
         results["XMSS-SHA2_10_256"] = test_scheme(
             XMSSScheme("XMSS-SHA2_10_256"), "XMSS-SHA2_10_256"
@@ -82,8 +84,7 @@ def main() -> int:
     except XMSSNotEnabledError as e:
         print(f"\n=== XMSS-SHA2_10_256 ===")
         print(f"  XMSS NICHT VERFUEGBAR.\n  {e}")
-        print("  -> liboqs muss mit aktiviertem XMSS-Support neu gebaut werden.")
-        results["XMSS-SHA2_10_256"] = None  # nicht ausgefuehrt
+        results["XMSS-SHA2_10_256"] = None
 
     # Zusammenfassung
     print("\n" + "=" * 50)
@@ -93,7 +94,6 @@ def main() -> int:
         status = "OK" if ok is True else ("UEBERSPRUNGEN" if ok is None else "FEHLER")
         print(f"  {name:25s} {status}")
 
-    # Exit-Code: 0 wenn nichts hart fehlgeschlagen ist
     failed = [n for n, ok in results.items() if ok is False]
     return 1 if failed else 0
 

@@ -1,16 +1,22 @@
 """
-SPHINCS+ / SLH-DSA Wrapper (FIPS 205).
+SLH-DSA Wrapper (FIPS 205, frueher CRYSTALS-SPHINCS+).
 
 Stateless Hash-Based Signatures - der "sichere Bruder" von XMSS.
 Im Gegensatz zu XMSS muss kein State verwaltet werden, dafuer sind
 Signaturen deutlich groesser und Signing langsamer.
 
-Naming-Konvention:
-    -s = "small signatures, slow signing"
-    -f = "fast signing, larger signatures"
+Naming:
+    -s = "small signatures, slow signing"  (langsam, kleinere Signatur)
+    -f = "fast signing, larger signatures" (schnell, groessere Signatur)
 
-Wichtig: NIST hat das Naming auf SLH-DSA umgestellt. liboqs unterstuetzt
-beide Varianten - wir nutzen die SHA2-Familie als Default.
+In liboqs 0.15 sind die Mechanismen entsprechend FIPS 205 benannt:
+    SLH_DSA_PURE_<HASH>_<LEVEL><S|F>
+    - PURE  : keine Pre-Hashing-Variante (Standardfall)
+    - HASH  : SHA2 oder SHAKE
+    - LEVEL : 128, 192 oder 256 (Bit Sicherheitsstaerke)
+
+Wir nutzen die SHA2-PURE-Familie als Default - das ist das, was die
+meisten Vergleichstabellen in der Literatur verwenden.
 """
 from __future__ import annotations
 import oqs
@@ -18,22 +24,26 @@ import oqs
 from .base import SignatureScheme, KeyPair
 
 
-# Auswahl gaengiger Parametersets, Mapping zu liboqs-Namen.
-# Die genauen Strings koennen je nach liboqs-Version variieren -
-# wir validieren beim Init gegen oqs.get_enabled_sig_mechanisms().
+# Friendly-Name -> liboqs-Name (FIPS 205)
+# Wir behalten "SPHINCS+"-Bezeichnung als Friendly-Name fuer Konsistenz mit
+# aelterer Literatur, mappen aber auf den FIPS-Namen.
 PARAMETER_SETS = {
-    # Format: "Friendly-Name": "liboqs-internal-name"
-    "SPHINCS+-128s": "SPHINCS+-SHA2-128s-simple",
-    "SPHINCS+-128f": "SPHINCS+-SHA2-128f-simple",
-    "SPHINCS+-192s": "SPHINCS+-SHA2-192s-simple",
-    "SPHINCS+-192f": "SPHINCS+-SHA2-192f-simple",
-    "SPHINCS+-256s": "SPHINCS+-SHA2-256s-simple",
-    "SPHINCS+-256f": "SPHINCS+-SHA2-256f-simple",
+    "SLH-DSA-SHA2-128s": "SLH_DSA_PURE_SHA2_128S",
+    "SLH-DSA-SHA2-128f": "SLH_DSA_PURE_SHA2_128F",
+    "SLH-DSA-SHA2-192s": "SLH_DSA_PURE_SHA2_192S",
+    "SLH-DSA-SHA2-192f": "SLH_DSA_PURE_SHA2_192F",
+    "SLH-DSA-SHA2-256s": "SLH_DSA_PURE_SHA2_256S",
+    "SLH-DSA-SHA2-256f": "SLH_DSA_PURE_SHA2_256F",
+    # SHAKE-Varianten - relevant, falls man SHA-3-basiert vergleichen will
+    "SLH-DSA-SHAKE-128s": "SLH_DSA_PURE_SHAKE_128S",
+    "SLH-DSA-SHAKE-128f": "SLH_DSA_PURE_SHAKE_128F",
+    "SLH-DSA-SHAKE-256s": "SLH_DSA_PURE_SHAKE_256S",
+    "SLH-DSA-SHAKE-256f": "SLH_DSA_PURE_SHAKE_256F",
 }
 
 
-class SPHINCSScheme(SignatureScheme):
-    def __init__(self, parameter_set: str = "SPHINCS+-128f"):
+class SLHDSAScheme(SignatureScheme):
+    def __init__(self, parameter_set: str = "SLH-DSA-SHA2-128f"):
         if parameter_set not in PARAMETER_SETS:
             raise ValueError(
                 f"Unbekanntes Parameterset: {parameter_set}. "
@@ -42,13 +52,11 @@ class SPHINCSScheme(SignatureScheme):
         self._parameter_set = parameter_set
         self._oqs_name = PARAMETER_SETS[parameter_set]
 
-        # Sanity-Check: ist dieses Parameterset im aktuellen liboqs-Build aktiv?
+        # Sanity-Check
         enabled = oqs.get_enabled_sig_mechanisms()
         if self._oqs_name not in enabled:
             raise RuntimeError(
-                f"{self._oqs_name} ist nicht in deinem liboqs-Build aktiviert.\n"
-                f"Aktivierte SPHINCS+-Varianten:\n  "
-                + "\n  ".join(m for m in enabled if "SPHINCS" in m)
+                f"{self._oqs_name} ist nicht in deinem liboqs-Build aktiviert."
             )
 
     @property
@@ -66,7 +74,7 @@ class SPHINCSScheme(SignatureScheme):
         return KeyPair(
             public_key=public_key,
             secret_key=secret_key,
-            algorithm="SPHINCS+",
+            algorithm="SLH-DSA",
             parameter_set=self._parameter_set,
         )
 
@@ -90,3 +98,8 @@ class SPHINCSScheme(SignatureScheme):
     def secret_key_size(self) -> int:
         with oqs.Signature(self._oqs_name) as s:
             return s.details["length_secret_key"]
+
+
+# Rueckwaertskompatibler Alias - falls du irgendwo schon "SPHINCSScheme"
+# im Code stehen hast, funktioniert das damit weiter.
+SPHINCSScheme = SLHDSAScheme

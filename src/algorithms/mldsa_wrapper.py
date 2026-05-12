@@ -1,13 +1,8 @@
 """
 ML-DSA Wrapper (FIPS 204, ehemals CRYSTALS-Dilithium).
 
-Verwendet liboqs-python. ML-DSA ist gitterbasiert und stateless,
-d.h. der Secret Key kann beliebig oft zum Signieren verwendet werden.
-
-Verfuegbare Parametersets in liboqs:
-    - ML-DSA-44   (NIST Level 2, Empfehlung fuer "AES-128-aequivalent")
-    - ML-DSA-65   (NIST Level 3)
-    - ML-DSA-87   (NIST Level 5, hoechste Sicherheit)
+Stateless gitterbasiertes Signaturverfahren - der Secret Key kann
+beliebig oft zum Signieren verwendet werden.
 """
 from __future__ import annotations
 import oqs
@@ -15,11 +10,8 @@ import oqs
 from .base import SignatureScheme, KeyPair
 
 
-# Mapping unserer freundlichen Namen auf liboqs-Bezeichnungen
 PARAMETER_SETS = {
-    "ML-DSA-44": "ML-DSA-44",
     "ML-DSA-65": "ML-DSA-65",
-    "ML-DSA-87": "ML-DSA-87",
 }
 
 

@@ -1,9 +1,9 @@
 """
 Abstraktes Interface fuer alle Signatur-Algorithmen.
 
-Damit der Benchmark-Runner alle drei Algorithmen einheitlich aufrufen kann,
-muessen sie dasselbe Interface erfuellen - unabhaengig davon, ob sie
-stateful (XMSS) oder stateless (ML-DSA, SPHINCS+) sind.
+Damit der Benchmark-Runner alle drei Algorithmen einheitlich aufrufen
+kann, muessen sie dasselbe Interface erfuellen - unabhaengig davon, ob
+sie stateful (XMSS) oder stateless (ML-DSA, SLH-DSA) sind.
 """
 from __future__ import annotations
 from abc import ABC, abstractmethod
@@ -34,7 +34,7 @@ class SignatureScheme(ABC):
     @property
     @abstractmethod
     def is_stateful(self) -> bool:
-        """True bei XMSS, False bei ML-DSA und SPHINCS+."""
+        """True bei XMSS, False bei ML-DSA und SLH-DSA."""
 
     @abstractmethod
     def keygen(self) -> KeyPair:
@@ -58,7 +58,7 @@ class SignatureScheme(ABC):
 
     @abstractmethod
     def signature_size(self) -> int:
-        """Erwartete Signaturgroesse in Bytes (fuer Benchmark-Plots)."""
+        """Erwartete Signaturgroesse in Bytes."""
 
     @abstractmethod
     def public_key_size(self) -> int:

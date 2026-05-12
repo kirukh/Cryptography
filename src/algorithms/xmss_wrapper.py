@@ -6,20 +6,13 @@ nach jeder Signatur inkrementiert werden MUSS. Wird derselbe Index
 zweimal verwendet, kann ein Angreifer aus den beiden Signaturen
 Forgeries unter dem Public Key erzeugen.
 
-Implementierungs-Strategie:
-- Wir nutzen liboqs-python, FALLS XMSS in liboqs aktiviert ist.
-- Sonst verwenden wir die offizielle xmss-reference (Subprocess).
+liboqs-python liefert nach jedem sign() den AKTUALISIERTEN Secret Key
+zurueck. Damit haben wir Kontrolle ueber den State - wir koennen ihn
+auch absichtlich falsch persistieren, kopieren, usw. Genau das brauchen
+wir fuer die Statefulness-Demos.
 
-Das Schoene: liboqs-python liefert nach jedem sign() den AKTUALISIERTEN
-Secret Key zurueck. Damit haben wir vollstaendige Kontrolle ueber den
-State - wir koennen ihn absichtlich falsch persistieren, kopieren,
-auf mehreren Knoten gleichzeitig nutzen etc. Genau das brauchen wir
-fuer die Statefulness-Demos in Schritt 4.
-
-Verfuegbare Parametersets (RFC 8391):
+Verfuegbares Parameterset:
     XMSS-SHA2_10_256  : 2^10 = 1024 Signaturen, SHA-256
-    XMSS-SHA2_16_256  : 2^16 = 65k Signaturen
-    XMSS-SHA2_20_256  : 2^20 = ~1M Signaturen (aber sehr lange Keygen!)
 """
 from __future__ import annotations
 import oqs
@@ -29,8 +22,6 @@ from .base import SignatureScheme, KeyPair
 
 PARAMETER_SETS = {
     "XMSS-SHA2_10_256": "XMSS-SHA2_10_256",
-    "XMSS-SHA2_16_256": "XMSS-SHA2_16_256",
-    "XMSS-SHA2_20_256": "XMSS-SHA2_20_256",
 }
 
 
@@ -53,24 +44,26 @@ class XMSSScheme(SignatureScheme):
         self._oqs_name = PARAMETER_SETS[parameter_set]
 
         # Pruefung: ist XMSS in diesem liboqs-Build ueberhaupt enabled?
-        # XMSS sitzt in liboqs unter den "stateful sig mechanisms",
-        # nicht unter den normalen sig mechanisms.
+        # XMSS sitzt in liboqs unter den "stateful sig mechanisms".
         try:
             enabled_stateful = oqs.get_enabled_stateful_sig_mechanisms()
         except AttributeError:
             raise XMSSNotEnabledError(
                 "Dein liboqs-python kennt keine stateful-Signaturen. "
-                "Du brauchst liboqs >= 0.10 mit OQS_ENABLE_SIG_STFL_XMSS=ON, "
-                "und liboqs-python aus dem 'stfl-key-sigs'-Branch oder "
-                "main >= 0.10."
+                "Stelle sicher, dass liboqs >= 0.10 mit aktiviertem "
+                "Stateful-Support gebaut wurde und liboqs-python aus dem "
+                "Quellcode installiert ist (siehe setup_liboqs.sh)."
             )
 
         if self._oqs_name not in enabled_stateful:
             raise XMSSNotEnabledError(
-                f"{self._oqs_name} ist nicht aktiviert. "
-                f"liboqs muss mit folgenden CMake-Flags gebaut werden:\n"
-                f"  -DOQS_ENABLE_SIG_STFL_XMSS=ON\n"
-                f"  -DOQS_HAZARDOUS_EXPERIMENTAL_ENABLE_SIG_STFL_KEY_SIG_GEN=ON\n"
+                f"{self._oqs_name} ist nicht aktiviert.\n"
+                f"liboqs muss mit aktiviertem Stateful-Support gebaut "
+                f"werden (siehe setup_liboqs.sh). Der genaue Name des "
+                f"HAZARDOUS-Flags kann je nach liboqs-Version variieren; "
+                f"in liboqs/CMakeLists.txt die verfuegbaren "
+                f"OQS_ENABLE_SIG_STFL_*- und OQS_HAZARDOUS_*-Optionen "
+                f"pruefen.\n"
                 f"Aktivierte stateful-Mechanismen: {enabled_stateful}"
             )
 
@@ -83,7 +76,6 @@ class XMSSScheme(SignatureScheme):
         return True
 
     def keygen(self) -> KeyPair:
-        # liboqs hat fuer stateful-sigs eine eigene Klasse: StatefulSignature
         with oqs.StatefulSignature(self._oqs_name) as signer:
             public_key = signer.generate_keypair()
             secret_key = signer.export_secret_key()
@@ -99,8 +91,7 @@ class XMSSScheme(SignatureScheme):
 
         Der zurueckgegebene secret_key ist NICHT identisch mit dem Input -
         der interne Index wurde inkrementiert. Wer den alten secret_key
-        weiterverwendet, signiert mit demselben Index erneut und liefert
-        einem Angreifer damit alle Bausteine fuer eine Forgery.
+        weiterverwendet, signiert mit demselben Index erneut.
         """
         with oqs.StatefulSignature(self._oqs_name, secret_key=secret_key) as signer:
             signature = signer.sign(message)
@@ -124,10 +115,14 @@ class XMSSScheme(SignatureScheme):
             return s.details["length_secret_key"]
 
     def remaining_signatures(self, secret_key: bytes) -> int:
-        """Wie viele Signaturen sind mit diesem Key noch moeglich?
+        """Anzahl der mit diesem Key noch moeglichen Signaturen.
 
-        Das ist ein XMSS-spezifischer Helfer, den die anderen Algorithmen
-        nicht haben - in der Statefulness-Demo wichtig.
+        Hinweis zur liboqs-Konvention: direkt nach keygen() liefert
+        liboqs fuer XMSS-SHA2_10_256 den Wert 1023, nicht 1024. Der
+        initiale Index 0 wird intern als 'allokiert, aber noch nicht
+        verbraucht' gezaehlt. Funktional ohne Konsequenz: der Counter
+        sinkt pro sign() exakt um 1, und die Reuse-Eigenschaft bleibt
+        unveraendert.
         """
         with oqs.StatefulSignature(self._oqs_name, secret_key=secret_key) as s:
             return s.sigs_remaining()

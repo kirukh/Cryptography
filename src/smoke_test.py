@@ -2,7 +2,6 @@
 Smoke-Test fuer alle drei Algorithmen.
 
 Pruft NUR, ob keygen -> sign -> verify funktioniert.
-Noch keine Benchmarks, noch keine Statefulness-Tests.
 
 Aufruf:
     cd pq-bench
@@ -42,18 +41,15 @@ def test_scheme(scheme, label: str) -> bool:
         valid = scheme.verify(kp.public_key, message, signature)
         print("ok" if valid else "FEHLGESCHLAGEN")
 
-        # Negativtest: manipulierte Nachricht muss ungueltig sein
-        # ACHTUNG: Bei XMSS erhoeht das den Index-Verbrauch nicht, weil
-        # verify() nur den Public Key braucht.
         print("  -> negativ-verify ...", end=" ")
         invalid = scheme.verify(kp.public_key, message + b"!", signature)
-        print("ok" if not invalid else "FEHLGESCHLAGEN (haette false sein muessen!)")
+        print("ok" if not invalid else "FEHLGESCHLAGEN")
 
-        # Bei XMSS: zeigen, dass sich der Key veraendert hat
         if scheme.is_stateful:
             print(f"  -> SK veraendert: {new_sk != kp.secret_key} (muss True sein!)")
             if hasattr(scheme, "remaining_signatures"):
-                print(f"  -> verbleibende Signaturen: {scheme.remaining_signatures(new_sk)}")
+                print(f"  -> verbleibende Signaturen: "
+                      f"{scheme.remaining_signatures(new_sk)}")
 
         return valid and not invalid
     except Exception as e:
@@ -64,10 +60,8 @@ def test_scheme(scheme, label: str) -> bool:
 def main() -> int:
     results = {}
 
-    # ML-DSA
     results["ML-DSA-65"] = test_scheme(MLDSAScheme("ML-DSA-65"), "ML-DSA-65")
 
-    # SLH-DSA (vormals SPHINCS+)
     try:
         results["SLH-DSA-SHA2-128f"] = test_scheme(
             SLHDSAScheme("SLH-DSA-SHA2-128f"), "SLH-DSA-SHA2-128f"
@@ -76,7 +70,6 @@ def main() -> int:
         print(f"\nSLH-DSA konnte nicht initialisiert werden: {e}")
         results["SLH-DSA-SHA2-128f"] = False
 
-    # XMSS
     try:
         results["XMSS-SHA2_10_256"] = test_scheme(
             XMSSScheme("XMSS-SHA2_10_256"), "XMSS-SHA2_10_256"
@@ -86,7 +79,6 @@ def main() -> int:
         print(f"  XMSS NICHT VERFUEGBAR.\n  {e}")
         results["XMSS-SHA2_10_256"] = None
 
-    # Zusammenfassung
     print("\n" + "=" * 50)
     print("Zusammenfassung:")
     print("=" * 50)

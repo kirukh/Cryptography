@@ -2,15 +2,15 @@
 Mess-Mechanik fuer Performance-Benchmarks.
 
 Designentscheidungen:
-- time.perf_counter_ns() statt time.time(): hoechste Aufloesung, monotonisch.
+- time.perf_counter_ns() statt time.time(): hoechste Aufloesung,
+  monotonisch.
 - Warmup-Iterationen: erste Messungen sind unzuverlaessig (kalter Cache,
   Branch-Predictor untrainiert, ggf. Lazy-Init in der C-Lib).
-- Wir speichern JEDE einzelne Messung, nicht nur Mean/Median - das brauchen
-  wir spaeter fuer Box-Plots.
+- Wir speichern jede Einzelmessung, nicht nur Mean/Median.
 - Median als robuste primaere Metrik, Mean+Std als sekundaer.
 - tracemalloc verfaelscht die Zeitmessung deutlich, daher zwei getrennte
-  Phasen: erst Zeitmessung ohne tracemalloc, dann eine separate Iteration
-  mit tracemalloc fuer den Memory-Peak.
+  Phasen: erst Zeitmessung, dann separate Iteration mit tracemalloc fuer
+  den Memory-Peak.
 """
 from __future__ import annotations
 import gc
@@ -23,10 +23,7 @@ from typing import Callable, Any
 
 @dataclass
 class Measurement:
-    """Ergebnis einer einzelnen gemessenen Operation.
-
-    raw_times_ns enthaelt alle Einzelmessungen - daraus zeichnen wir Box-Plots.
-    """
+    """Ergebnis einer einzelnen gemessenen Operation."""
     operation: str
     algorithm: str
     iterations: int
@@ -65,19 +62,7 @@ def measure(
     warmup: int = 5,
     measure_memory: bool = True,
 ) -> Measurement:
-    """Misst die Ausfuehrungszeit von fn() ueber mehrere Iterationen.
-
-    Args:
-        operation_name : "keygen" | "sign" | "verify"
-        algorithm_name : Name des Algorithmus (fuer Logging und CSV)
-        fn             : Die zu messende Funktion (keine Argumente).
-        iterations     : Anzahl der "echten" Messungen.
-        warmup         : Anzahl der Warmup-Iterationen (verworfen).
-        measure_memory : Wenn True, zusaetzlich Memory-Peak via tracemalloc.
-
-    Returns:
-        Measurement mit allen Einzelmessungen + abgeleiteten Statistiken.
-    """
+    """Misst die Ausfuehrungszeit von fn() ueber mehrere Iterationen."""
     # Warmup - Ergebnisse verworfen.
     for _ in range(warmup):
         fn()
@@ -92,9 +77,8 @@ def measure(
         raw_times.append(end - start)
 
     # Memory-Peak in separater Iteration.
-    # Hinweis: tracemalloc misst nur Python-Heap. Da liboqs in C allokiert,
-    # ist das eine Untergrenze - reicht aber, um relative Unterschiede zu
-    # zeigen (z.B. dass SK-Handling in XMSS mehr Python-Memory braucht).
+    # tracemalloc misst nur Python-Heap. Da liboqs in C allokiert, ist das
+    # eine Untergrenze - reicht aber, um relative Unterschiede zu zeigen.
     peak = 0
     if measure_memory:
         gc.collect()

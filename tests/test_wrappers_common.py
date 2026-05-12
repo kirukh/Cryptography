@@ -2,8 +2,8 @@
 Tests, die fuer ALLE drei Wrapper gleichzeitig gelten.
 
 Wir parametrisieren ueber ein 'scheme'-Fixture, das nacheinander
-ML-DSA, SLH-DSA und XMSS einliefert. So entstehen pro Test 3 Test-
-Cases mit minimalem Code-Duplikat.
+ML-DSA, SLH-DSA und XMSS einliefert. So entstehen pro Test drei
+Test-Cases mit minimalem Code-Duplikat.
 
 Wir testen hier das gemeinsame Interface aus base.py:
 - keygen erzeugt sinnvolle PK/SK
@@ -23,14 +23,8 @@ from src.algorithms import (
     SLHDSAScheme,
     XMSSScheme,
 )
-from .conftest import needs_xmss, _XMSS_OK
+from .conftest import needs_xmss
 
-
-# ----------------------------------------------------------------------
-# Parametrisierung: jedes ALL_SCHEMES-Element wird in jedem Test einmal
-# durchlaufen. XMSS bekommt ein pytest.param mit needs_xmss, sodass es
-# automatisch geskippt wird, wenn liboqs es nicht enthaelt.
-# ----------------------------------------------------------------------
 
 ALL_SCHEMES = [
     pytest.param(lambda: MLDSAScheme("ML-DSA-65"), id="ML-DSA-65"),
@@ -76,11 +70,7 @@ class TestKeygen:
         assert kp.parameter_set == scheme.name
 
     def test_keygen_two_calls_yield_different_keys(self, scheme):
-        """Zwei keygen-Aufrufe muessen unabhaengige Schluessel liefern.
-
-        Wenn das je False waere, haetten wir ein RNG-Problem oder
-        einen Bug, der Schluessel cached.
-        """
+        """Zwei keygen-Aufrufe muessen unabhaengige Schluessel liefern."""
         kp1 = scheme.keygen()
         kp2 = scheme.keygen()
         assert kp1.public_key != kp2.public_key
@@ -130,10 +120,9 @@ class TestSignVerify:
         assert len(sig) > 0
 
     def test_sign_returns_tuple(self, scheme, msg):
-        """sign() muss IMMER (sig, sk) liefern - bei stateful UND stateless.
-
-        Sonst koennen wir die beiden Faelle nicht einheitlich aufrufen.
-        """
+        """sign() muss IMMER (sig, sk) liefern - bei stateful UND
+        stateless. Sonst koennen wir die beiden Faelle nicht
+        einheitlich aufrufen."""
         kp = scheme.keygen()
         result = scheme.sign(kp.secret_key, msg)
         assert isinstance(result, tuple)
@@ -147,7 +136,6 @@ class TestSignVerify:
     def test_verify_rejects_modified_signature(self, scheme, msg):
         kp = scheme.keygen()
         sig, _ = scheme.sign(kp.secret_key, msg)
-        # Letztes Byte flippen - reicht in der Regel, um die Sig zu brechen
         tampered = bytearray(sig)
         tampered[-1] ^= 0x01
         assert scheme.verify(kp.public_key, msg, bytes(tampered)) is False
@@ -160,11 +148,7 @@ class TestSignVerify:
         assert scheme.verify(kp2.public_key, msg, sig) is False
 
     def test_verify_rejects_empty_signature(self, scheme, msg):
-        """Eine leere Signatur darf nicht akzeptiert werden.
-
-        liboqs sollte hier sauber False zurueckgeben oder eine
-        Exception werfen - beides ist akzeptabel, ein True waere ein Bug.
-        """
+        """Leere Signatur darf nicht akzeptiert werden."""
         kp = scheme.keygen()
         try:
             result = scheme.verify(kp.public_key, msg, b"")

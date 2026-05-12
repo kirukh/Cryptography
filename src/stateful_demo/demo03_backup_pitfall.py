@@ -1,15 +1,14 @@
 """
 Demo 3 - Die Backup-Falle.
 
-Lehrziel: Demo 2 hat das Reuse-Problem abstrakt gezeigt. Jetzt
-betten wir es in ein REALISTISCHES Operations-Szenario ein.
+Lehrziel: Demo 2 hat das Reuse-Problem abstrakt gezeigt. Jetzt betten
+wir es in ein REALISTISCHES Operations-Szenario ein.
 
 Szenario:
-    Eine Anwendung schreibt regelmaessig Audit-Log-Eintraege und
-    signiert sie mit XMSS, um Manipulationssicherheit zu gewaehr-
-    leisten. Der Sysadmin macht naechtlich ein Backup. Eines Tages
-    crashed der Server, das Backup wird zurueckgespielt. Was passiert
-    mit dem Index?
+    Eine Anwendung schreibt Audit-Log-Eintraege und signiert sie mit
+    XMSS. Der Sysadmin macht naechtlich Backup. Eines Tages crashed
+    der Server, das Backup wird zurueckgespielt. Was passiert mit
+    dem Index?
 
 Aufruf:
     python -m src.stateful_demo.demo03_backup_pitfall
@@ -35,7 +34,13 @@ def main():
     kp = scheme.keygen()
     pk = kp.public_key
 
-    # Wir fuehren einen kleinen 'audit log' mit (Nachricht, Sig, Index).
+    # liboqs zaehlt den initialen Index als 'allokiert' mit; der Wert
+    # ist also 1023 statt der theoretischen 1024 bei 2^10. Wir merken
+    # uns den initialen Pool-Wert statt eine Konstante zu nutzen, damit
+    # die Demo robust gegen diese Implementierungs-Konvention bleibt.
+    INITIAL_POOL = scheme.remaining_signatures(kp.secret_key)
+
+    # Audit log mit (Nachricht, Sig, Index).
     audit_log: list[tuple[bytes, bytes, int]] = []
 
     def log_entry(msg: bytes, sig: bytes) -> None:
@@ -59,7 +64,7 @@ def main():
     sk_backup = sk   # <-- Snapshot wird in Backup-System geschrieben
     info(f"SK-Backup gespeichert (sha256={fingerprint(sk_backup)})")
     info(f"Naechster freier Index laut Backup: "
-         f"{1024 - scheme.remaining_signatures(sk_backup)}")
+         f"{INITIAL_POOL - scheme.remaining_signatures(sk_backup)}")
 
     # ---- Tag 2 ----
     section("Tag 2, 10:00 Uhr - weiterer Betrieb")
@@ -85,11 +90,13 @@ def main():
         System fuer 'frei' haelt.
     """)
 
-    sk_after_restore = sk_backup    # boom
-    next_free_idx = 1024 - scheme.remaining_signatures(sk_after_restore)
+    sk_after_restore = sk_backup
+    next_free_idx = INITIAL_POOL - scheme.remaining_signatures(sk_after_restore)
     warn(f"Naechster 'freier' Index nach Restore: {next_free_idx}")
-    warn(f"Aber dieser Index wurde heute morgen schon benutzt fuer:")
-    info(f"  '{audit_log[next_free_idx][0].decode()}' (Index {audit_log[next_free_idx][2]})")
+    if 0 <= next_free_idx < len(audit_log):
+        warn("Aber dieser Index wurde heute morgen schon benutzt fuer:")
+        info(f"  '{audit_log[next_free_idx][0].decode()}' "
+             f"(Index {audit_log[next_free_idx][2]})")
 
     section("Tag 2, 14:30 Uhr - neue Signaturen nach dem Restore")
     sk = sk_after_restore
@@ -111,9 +118,7 @@ def main():
         beide kryptographisch gueltig.
     """)
 
-    # Indizes der neuen Signaturen
     for new_msg, new_sig, new_idx in new_entries:
-        # Existiert ein alter Eintrag mit demselben Index?
         for old_msg, old_sig, old_idx in audit_log:
             if old_idx == new_idx:
                 bad(f"\n  KOLLISION an Index {new_idx}:")
@@ -121,11 +126,11 @@ def main():
                 info(f"         verify={scheme.verify(pk, old_msg, old_sig)}")
                 info(f"    Neu: '{new_msg.decode()}'")
                 info(f"         verify={scheme.verify(pk, new_msg, new_sig)}")
-                bad(f"    -> Aus PK-Sicht sind BEIDE Eintraege legitim signiert.")
+                bad("    -> Aus PK-Sicht sind BEIDE Eintraege legitim signiert.")
 
     section("Audit-Trail vollstaendig kompromittiert")
-    info(f"Anzahl Log-Eintraege total:        {len(audit_log) + len(new_entries)}")
-    info(f"Anzahl kollidierende Indizes:      {len(new_entries)}")
+    info(f"Anzahl Log-Eintraege total:   {len(audit_log) + len(new_entries)}")
+    info(f"Anzahl kollidierende Indizes: {len(new_entries)}")
     bad("Die Audit-Eigenschaft 'manipulationssicher' ist verletzt:")
     info("  - Ein Auditor kann nicht mehr zwischen 'echt' und 'untergeschoben'")
     info("    unterscheiden, ohne Out-of-Band-Information zu konsultieren.")
@@ -135,10 +140,9 @@ def main():
         einer korrekt arbeitenden Anwendung!) sind mit naiven
         XMSS-Setups inkompatibel. Loesungsansaetze: (a) niemals den SK
         ins Backup nehmen, sondern bei Verlust einen neuen Schluessel
-        ausstellen (Operationskosten); (b) statefulness an speziali-
-        sierte Hardware delegieren (HSM); oder (c) auf stateless-
-        Verfahren wie ML-DSA / SLH-DSA wechseln, wo dieses Problem
-        ueberhaupt nicht existiert.
+        ausstellen; (b) statefulness an spezialisierte Hardware
+        delegieren (HSM); oder (c) auf stateless-Verfahren wie ML-DSA /
+        SLH-DSA wechseln, wo dieses Problem ueberhaupt nicht existiert.
     """)
 
 

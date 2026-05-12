@@ -1,22 +1,20 @@
 """
 Demo 2 - Index-Wiederverwendung.
 
-Lehrziel: Praktischer Beleg, dass der State zentral ist. Wenn ein
-Angreifer einen 'alten' Snapshot des Secret Keys hat, kann er
-mit demselben Index erneut signieren.
+Lehrziel: Wenn ein Angreifer einen 'alten' Snapshot des Secret Keys hat,
+kann er mit demselben Index erneut signieren.
 
 WICHTIG zur Tragweite:
-    Wir zeigen hier 'nur', dass beide Signaturen (mit demselben Index,
-    aber unterschiedlichen Nachrichten) gegen denselben Public Key
-    verifizieren. Das allein ist schon eine Katastrophe in Bezug auf
-    die Sicherheitsdefinition (Non-Repudiation, Unforgeability).
+    Wir zeigen, dass beide Signaturen (mit demselben Index, aber
+    unterschiedlichen Nachrichten) gegen denselben Public Key
+    verifizieren. Das allein verletzt die Sicherheitsdefinition
+    (Non-Repudiation, Unforgeability).
 
     Die theoretische Folge - WOTS+-Forgery - ist deutlich
-    aufwaendiger zu demonstrieren:
-    Aus zwei Signaturen unter demselben WOTS+-Key-Index laesst sich
-    ein 'Mix' der Hash-Ketten konstruieren, der eine VOELLIG NEUE
-    Nachricht authentisiert. Das setzen wir nicht praktisch um (das
-    waere eine eigene Arbeit), erklaeren es aber didaktisch.
+    aufwaendiger zu demonstrieren: aus zwei Signaturen unter demselben
+    WOTS+-Key-Index laesst sich ein 'Mix' der Hash-Ketten konstruieren,
+    der eine VOELLIG NEUE Nachricht authentisiert. Das setzen wir nicht
+    praktisch um, erklaeren es aber didaktisch.
 
     Quelle: Buchmann/Dahmen/Huelsing, 'XMSS - A Practical Forward
     Secure Signature Scheme', PQCrypto 2011, Sec. 3.
@@ -26,8 +24,8 @@ Aufruf:
 """
 from src.algorithms import XMSSScheme
 from src.stateful_demo._console import (
-    banner, section, info, good, bad, warn, explain,
-    show_bytes, fingerprint, takeaway,
+    banner, section, info, bad, warn, explain,
+    show_bytes, takeaway,
 )
 
 
@@ -50,7 +48,7 @@ def main():
     kp = scheme.keygen()
     pk = kp.public_key
     sk_initial = kp.secret_key   # <-- DAS ist unser 'Backup'
-    info(f"Initialer SK gespeichert (=Backup-Snapshot)")
+    info("Initialer SK gespeichert (=Backup-Snapshot)")
     show_bytes("PK", pk)
     show_bytes("SK (snapshot)", sk_initial, show_first=24)
 
@@ -72,7 +70,7 @@ def main():
     """)
 
     sk_restored = sk_initial   # boese: alter Snapshot wieder aktiv
-    info(f"SK wird auf den Backup-Stand zurueckgesetzt:")
+    info("SK wird auf den Backup-Stand zurueckgesetzt:")
     info(f"  remaining nach Restore: {scheme.remaining_signatures(sk_restored)}")
     warn("Der Index ist jetzt ZURUECKGESETZT auf den Stand vor 3 Signaturen!")
 
@@ -86,16 +84,14 @@ def main():
     msg_a = b"Original message - signed correctly"
     msg_b = b"FORGED  message - same index reused"
 
-    # Zwei Signaturen mit identischem Index 0
-    sig_a, _      = scheme.sign(sk_initial, msg_a)
-    sig_b, _      = scheme.sign(sk_restored, msg_b)
+    sig_a, _ = scheme.sign(sk_initial, msg_a)
+    sig_b, _ = scheme.sign(sk_restored, msg_b)
 
     info(f"\n  Signatur A: msg={msg_a!r}")
     show_bytes("    sig_a", sig_a)
     info(f"  Signatur B: msg={msg_b!r}")
     show_bytes("    sig_b", sig_b)
 
-    # Beide haben denselben WOTS+-Index in den ersten Bytes der Signatur.
     # In RFC 8391 ist der Index die ersten 4 Bytes der Signatur.
     idx_a = int.from_bytes(sig_a[:4], "big")
     idx_b = int.from_bytes(sig_b[:4], "big")
@@ -104,7 +100,7 @@ def main():
     if idx_a == idx_b:
         bad(f"BEIDE Signaturen verwenden denselben Index {idx_a}!")
     else:
-        warn(f"Indizes unterschiedlich (sollte hier nicht passieren) - bitte pruefen.")
+        warn("Indizes unterschiedlich - bitte pruefen.")
 
     section("Verifikation: beide Signaturen sind 'gueltig'")
     valid_a = scheme.verify(pk, msg_a, sig_a)
@@ -120,9 +116,7 @@ def main():
         Beobachtung 1 - bereits problematisch:
             Es existieren ZWEI gueltige Signaturen unter demselben
             Public Key fuer den gleichen Index, aber verschiedene
-            Nachrichten. Allein das verletzt die Non-Repudiation:
-            Ein Signierer kann jederzeit behaupten, eine seiner
-            Signaturen sei nicht von ihm.
+            Nachrichten. Das verletzt die Non-Repudiation.
 
         Beobachtung 2 - schwerwiegender:
             Aus zwei WOTS+-Signaturen mit demselben Index laesst sich
@@ -130,11 +124,7 @@ def main():
             gewaehlte Nachricht m* signieren kann - ohne den Secret
             Key zu kennen. Die Sicherheit von WOTS+ basiert auf der
             Annahme, dass jeder Hash-Ketten-Anker GENAU EINMAL
-            'aufgedeckt' wird. Wer zwei Aufdeckungen sieht, kann
-            Hash-Werte interpolieren.
-
-            Praktische Ausarbeitung: siehe RFC 8391 Section 9.4 und
-            Buchmann/Dahmen/Huelsing.
+            'aufgedeckt' wird.
     """)
 
     takeaway("""
@@ -143,8 +133,7 @@ def main():
         voraus, dass jeder Index genau einmal verwendet wird. Diese
         Garantie kann ein Algorithmus selbst nicht erzwingen - sie
         muss vom UMGEBENDEN SYSTEM (Storage, Backup-Strategie,
-        Nebenlaeufigkeit) sichergestellt werden. Genau hier scheitern
-        klassische IT-Praktiken.
+        Nebenlaeufigkeit) sichergestellt werden.
     """)
 
 

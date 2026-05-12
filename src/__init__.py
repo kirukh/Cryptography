@@ -1,1 +1,1 @@
-"""pq-bench: Vergleich von XMSS, ML-DSA und SPHINCS+."""
+"""pq-bench: Vergleich von XMSS, ML-DSA und SLH-DSA."""

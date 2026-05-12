@@ -1,16 +1,15 @@
 """
 Gemeinsame Hilfsfunktionen fuer alle Statefulness-Demos.
 
-Liefert konsistentes Output-Format ueber alle vier Demos hinweg.
+Liefert konsistentes Output-Format ueber alle Demos hinweg.
 """
 from __future__ import annotations
 import hashlib
 import textwrap
 
 
-# ANSI-Farben - funktioniert in WSL-Terminal, in VSCode-Terminal,
-# und in Windows Terminal. Falls du auf einem Terminal ohne ANSI-Support
-# bist (selten), kannst du USE_COLOR auf False setzen.
+# ANSI-Farben - funktioniert in WSL-Terminal, VSCode-Terminal,
+# Windows Terminal. Falls kein ANSI-Support: USE_COLOR auf False setzen.
 USE_COLOR = True
 
 C_RESET   = "\033[0m"  if USE_COLOR else ""

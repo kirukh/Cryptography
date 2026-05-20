@@ -21,7 +21,6 @@ VENDOR_DIR="${PROJECT_ROOT}/vendor"
 PREFIX="${PROJECT_ROOT}/vendor/install"
 
 LIBOQS_TAG="0.15.0"
-LIBOQS_PYTHON_TAG="0.14.0"
 
 mkdir -p "${VENDOR_DIR}"
 
@@ -56,8 +55,8 @@ ninja install
 # 2. liboqs-python installieren
 # ---------------------------------------------------------------------------
 if [ ! -d "${VENDOR_DIR}/liboqs-python" ]; then
-    echo ">>> Klone liboqs-python ${LIBOQS_PYTHON_TAG} ..."
-    git clone --depth 1 --branch "${LIBOQS_PYTHON_TAG}" \
+    echo ">>> Klone liboqs-python (main, da kein passender Tag verfuegbar) ..."
+    git clone --depth 1 \
         https://github.com/open-quantum-safe/liboqs-python.git \
         "${VENDOR_DIR}/liboqs-python"
 fi

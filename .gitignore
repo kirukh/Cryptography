@@ -6,7 +6,7 @@ __pycache__/
 venv/
 
 # Build-Artefakte
-vendor/
+vendor/*
 
 # Benchmark-Output
 results/*.csv

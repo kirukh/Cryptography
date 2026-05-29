@@ -2,22 +2,33 @@
 Demo 2 - Index-Wiederverwendung.
 
 Lehrziel: Wenn ein Angreifer einen 'alten' Snapshot des Secret Keys hat,
-kann er mit demselben Index erneut signieren.
+kann er mit demselben Index erneut signieren. Die Demo zeigt damit
+PRAKTISCH die Verletzung der Sicherheitsdefinition (Non-Repudiation,
+EUF-CMA) - aber nicht den vollstaendigen Forgery-Angriff.
 
-WICHTIG zur Tragweite:
-    Wir zeigen, dass beide Signaturen (mit demselben Index, aber
-    unterschiedlichen Nachrichten) gegen denselben Public Key
-    verifizieren. Das allein verletzt die Sicherheitsdefinition
-    (Non-Repudiation, Unforgeability).
+Was diese Demo zeigt:
+    Zwei Signaturen unter demselben Index, beide gueltig unter dem
+    gleichen Public Key, fuer zwei VERSCHIEDENE vom Angreifer
+    waehlbare Nachrichten. Das verletzt die Sicherheitsdefinition
+    eines Signaturverfahrens unmittelbar.
 
-    Die theoretische Folge - WOTS+-Forgery - ist deutlich
-    aufwaendiger zu demonstrieren: aus zwei Signaturen unter demselben
-    WOTS+-Key-Index laesst sich ein 'Mix' der Hash-Ketten konstruieren,
-    der eine VOELLIG NEUE Nachricht authentisiert. Das setzen wir nicht
-    praktisch um, erklaeren es aber didaktisch.
+Was diese Demo NICHT zeigt (bewusste Entscheidung):
+    Die volle WOTS+-Forgery-Konstruktion, bei der aus zwei
+    Signaturen unter demselben Index eine dritte Signatur fuer eine
+    bisher noch nicht signierte Nachricht m* konstruiert wird, ohne
+    den Secret Key zu kennen. Diese Konstruktion existiert in der
+    Literatur (Buchmann/Dahmen/Huelsing 2011, Sec. 3) und folgt aus
+    der Tatsache, dass WOTS+-Hash-Ketten bei Reuse teilweise
+    'aufgedeckt' werden. Wir verzichten auf die praktische
+    Implementierung dieses Schritts; sein Erkenntniswert ueber den
+    bereits hier gezeigten Bruch hinaus rechtfertigt den Aufwand im
+    Rahmen einer 60h-Projektarbeit nicht.
 
-    Quelle: Buchmann/Dahmen/Huelsing, 'XMSS - A Practical Forward
-    Secure Signature Scheme', PQCrypto 2011, Sec. 3.
+    Wichtig fuer die Interpretation: bereits die hier gezeigte
+    Beobachtung - zwei gueltige Signaturen verschiedener Nachrichten
+    unter demselben Index - ist hinreichend, um das Verfahren als
+    gebrochen zu betrachten. Die volle Forgery ist eine zusaetzliche
+    Folge, kein notwendiger Beleg.
 
 Aufruf:
     python -m src.stateful_demo.demo02_reuse_attack
@@ -111,20 +122,32 @@ def main():
         bad("Aus Sicht eines Verifizierers: BEIDES gueltig.")
         bad("Non-Repudiation und Single-Use sind gebrochen.")
 
-    section("Was bedeutet das kryptographisch?")
+    section("Einordnung: was haben wir gezeigt, was nicht?")
     explain("""
-        Beobachtung 1 - bereits problematisch:
-            Es existieren ZWEI gueltige Signaturen unter demselben
-            Public Key fuer den gleichen Index, aber verschiedene
-            Nachrichten. Das verletzt die Non-Repudiation.
+        Praktisch gezeigt (Beobachtung):
+            Zwei gueltige Signaturen unter demselben Public Key fuer
+            denselben Index, aber verschiedene Nachrichten. Das ist
+            bereits ein direkter Bruch der Sicherheitsdefinition - ein
+            Verifizierer kann nicht zwischen 'legitim' und 'mit altem
+            Snapshot nachsigniert' unterscheiden. Non-Repudiation und
+            Single-Use sind verletzt.
 
-        Beobachtung 2 - schwerwiegender:
-            Aus zwei WOTS+-Signaturen mit demselben Index laesst sich
-            ein Angriff konstruieren, der eine NEUE, vom Angreifer
-            gewaehlte Nachricht m* signieren kann - ohne den Secret
-            Key zu kennen. Die Sicherheit von WOTS+ basiert auf der
-            Annahme, dass jeder Hash-Ketten-Anker GENAU EINMAL
-            'aufgedeckt' wird.
+        Theoretisch bekannt, hier nicht praktisch konstruiert:
+            Aus zwei WOTS+-Signaturen unter demselben Index laesst
+            sich eine dritte Signatur fuer eine NEUE, bislang nicht
+            signierte Nachricht m* berechnen - ohne den Secret Key zu
+            besitzen. Die Konstruktion nutzt aus, dass WOTS+ pro
+            Index eine Hash-Kette nur bis zu einem bestimmten Schritt
+            'aufdeckt'; bei zwei Signaturen liegen oft genug Anker
+            offen, um beliebige Zwischenwerte zu kombinieren.
+
+        Referenz: Buchmann, Dahmen, Huelsing - 'XMSS - A Practical
+        Forward Secure Signature Scheme', PQCrypto 2011, Sec. 3.
+
+        Fuer die Argumentation dieser Arbeit reicht der bereits
+        praktisch demonstrierte Bruch aus: das Sicherheitsmodell von
+        XMSS erlaubt keinen Index-Reuse, und der Reuse passiert hier
+        ohne Programmierfehler durch ein realistisches Backup-Muster.
     """)
 
     takeaway("""

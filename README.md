@@ -157,15 +157,19 @@ bash setup_liboqs.sh
 Das dauert **5–10 Minuten** je nach Hardware. Das Script:
 
 - Klont liboqs Tag **0.15.0** nach `vendor/liboqs/`
-- Klont liboqs-python Tag **0.14.0** nach `vendor/liboqs-python/`
+- Klont liboqs-python aus dem **`main`-Branch** nach `vendor/liboqs-python/`
 - Baut liboqs mit den Flags `OQS_ENABLE_SIG_STFL_XMSS=ON` und
   `OQS_HAZARDOUS_EXPERIMENTAL_ENABLE_SIG_STFL_KEY_SIG_GEN=ON`
 - Installiert die Bibliothek nach `vendor/install/`
 - Installiert liboqs-python in das aktive venv
 
-> **Versions-Hinweis:** liboqs 0.15.0 ↔ liboqs-python 0.14.0 ist die
-> aktuelle Kombination. Beim Import erscheint eine `UserWarning` über
-> die Versions-Differenz — das ist funktional irrelevant.
+> **Versions-Hinweis:** liboqs-python wird aus `main` geklont, weil es
+> zum Projektzeitpunkt keinen mit liboqs 0.15.0 kompatiblen
+> Release-Tag gibt. Beim Import erscheint deshalb eine `UserWarning`
+> über eine Versions-Differenz — das ist funktional irrelevant. Das
+> Script gibt am Ende den exakt verwendeten Commit-Hash von
+> liboqs-python aus; dieser Wert sollte für eine spätere Reproduktion
+> notiert werden.
 
 ### 3.6 LD_LIBRARY_PATH setzen
 
@@ -190,11 +194,12 @@ Bei neuer Shell danach automatisch gesetzt.
 python -c "import oqs; print(oqs.oqs_version())"
 ```
 
-Erwartete Ausgabe:
+Erwartete Ausgabe (genauer Wortlaut hängt von der `main`-Version von
+liboqs-python ab):
 
 ```
 liboqs-python faulthandler is disabled
-...UserWarning: liboqs version (major, minor) 0.15.0 differs from liboqs-python version 0.14.0
+...UserWarning: liboqs version (major, minor) 0.15.0 differs from liboqs-python version <X.Y.Z>
 0.15.0
 ```
 
@@ -303,6 +308,10 @@ Mess-Methodik im Detail:
 - Warmup-Iterationen werden verworfen (kalter Cache, Branch-Predictor)
 - Median als robuste Hauptmetrik (gegen GC-Pausen), Mean und Stdev als
   Nebenmetriken
+- **Kein Memory-Footprint:** `tracemalloc` würde nur den Python-Heap
+  sehen, nicht die in C allozierten Hash-Bäume und Schlüsselstrukturen.
+  Eine solche Messung wäre methodisch irreführend; wir verzichten
+  deshalb bewusst auf eine Memory-Spalte im Output.
 
 **Screenshot-Idee:** die Zusammenfassungs-Tabellen aus dem Runner —
 ergeben die "Performance-Tabelle" und "Größen-Tabelle" in der
@@ -316,6 +325,13 @@ Zeigt das Grundproblem abstrakt:
 - Snapshot wiederherstellen ("Backup-Restore")
 - Erneut signieren → zwei Signaturen mit **identischem Index 0**, beide
   unter demselben Public Key gültig
+
+Die Demo zeigt damit praktisch die Verletzung der Sicherheitsdefinition
+(Non-Repudiation, EUF-CMA). Sie zeigt **nicht** die volle
+WOTS+-Forgery-Konstruktion (Forgery für eine bislang nicht signierte
+Nachricht m*) — dieser theoretische Folgeschritt nach Buchmann/Dahmen/
+Hülsing 2011, Sec. 3, wird im finalen Section-Block der Demo
+referenziert und seine bewusste Auslassung begründet.
 
 **Screenshot-Idee:** die Stelle "BEIDE Signaturen verwenden denselben
 Index 0" — das ist der visuell stärkste Beleg des Reuse-Problems.
@@ -341,8 +357,17 @@ Zwei Szenarien:
 - Active-Standby mit asynchroner Replikation (Replikations-Lag bei
   Failover)
 
-Zeigt: Statefulness ist mit klassischen HA-Patterns strukturell
-inkompatibel.
+Methodischer Hinweis: in Szenario A wird keine echte Race Condition
+ausgelöst — eine solche wäre nicht-deterministisch und schwer
+reproduzierbar. Stattdessen wird der Endzustand einer fehlgeschlagenen
+Read-Modify-Write-Sequenz **deterministisch nachgestellt**: beide
+Knoten signieren vom gleichen SK-Snapshot. Das Beobachtungs-Ergebnis
+ist identisch mit dem einer echten Race; der Unterschied liegt nur im
+Zustandekommen. Die Demo macht diese Vereinfachung im laufenden
+Output explizit.
+
+Insgesamt zeigt die Demo: Statefulness ist mit klassischen
+HA-Patterns strukturell inkompatibel.
 
 ### 5.6 Tests (`tests/`)
 
@@ -370,7 +395,10 @@ visuell die Test-Coverage.
 ### 6.1 Reproduzierbarkeit
 
 Alle Messungen sind reproduzierbar:
-- Pinned Versionen: liboqs 0.15.0, liboqs-python 0.14.0
+- Pinned Version: liboqs **0.15.0** (Tag)
+- liboqs-python aus `main` — der genaue Commit-Hash wird am Ende von
+  `setup_liboqs.sh` ausgegeben und sollte in der Ausarbeitung
+  dokumentiert werden
 - Festgelegte Iterationen pro Operation (siehe `runner.py`)
 - Median statt Mean → robust gegen Ausreißer
 - Warmup eliminiert Cold-Cache-Effekte
@@ -378,9 +406,66 @@ Alle Messungen sind reproduzierbar:
 In der Ausarbeitung erwähnen:
 - Hardware-Spezifikation (CPU, RAM)
 - Betriebssystem (WSL2 / Ubuntu 22.04)
-- liboqs-Version
+- liboqs-Version (0.15.0)
+- liboqs-python Commit-Hash
 
-### 6.2 liboqs-Konventionen, die in der Arbeit erwähnt werden sollten
+### 6.2 Wahl der Parameter-Sets
+
+Pro Algorithmus wird **ein** Parameterset gebenchmarkt. Begründung:
+
+- **ML-DSA-65** — Mittelweg im ML-DSA-Spektrum (Sicherheitskategorie
+  NIST Level 3). Standardempfehlung für Allzweck-Anwendungen und
+  gängigster Vergleichspunkt in der Literatur.
+- **SLH-DSA-SHA2-128f** — `f`-Variante (fast signing) auf NIST Level 1.
+  Die `s`-Varianten (small signatures) wären für den Vergleich
+  ebenfalls interessant, machen sign aber nochmal um eine
+  Größenordnung langsamer; das kostet Benchmark-Laufzeit ohne neue
+  qualitative Aussage.
+- **XMSS-SHA2_10_256** — kleinstes RFC-8391-Set (2^10 = 1024
+  Signaturen pro Schlüssel). Größere Höhen (16, 20) sind mit
+  HSS/XMSSMT praxisrelevanter, ihr `keygen` läuft aber minutenlang
+  bis stundenlang und ist im Rahmen einer 60h-Arbeit nicht praktikabel.
+
+Qualitative Effekte größerer Parameter-Sets (für Diskussion in der
+Ausarbeitung):
+- ML-DSA-87 (Level 5): leicht größere Schlüssel/Signaturen, sign/verify
+  ~30–50 % langsamer — die Größenordnung der ML-DSA-Werte ändert sich
+  nicht relativ zu SLH-DSA und XMSS
+- SLH-DSA-SHA2-256s (Level 5, small): Signaturen ~50 KB, sign ~Sekunden
+  — verstärkt die qualitative Aussage "SLH-DSA hat den langsamsten
+  sign" deutlich
+- XMSS-SHA2_16_256 / 20_256: Pool 2^16 / 2^20, keygen extrem teuer —
+  verstärkt "XMSS-keygen ist die teuerste Operation im Vergleich"
+
+Der Single-Parameterset-Vergleich liefert also die richtige Ordnung
+der Verfahren; mehr Parameter würden die Aussage verschärfen, nicht
+umkehren.
+
+### 6.3 Sicherheits-Niveau-Caveat (wichtig für die Ausarbeitung)
+
+Die drei gebenchmarkten Parameter-Sets haben **nicht das gleiche
+NIST-Security-Level**:
+
+| Parameterset       | NIST-Level | klassisch / quanten |
+|--------------------|-----------|---------------------|
+| ML-DSA-65          | Level 3   | ~192 Bit / 128 Bit  |
+| SLH-DSA-SHA2-128f  | Level 1   | ~128 Bit / 64 Bit*  |
+| XMSS-SHA2_10_256   | ~Level 1  | ~128 Bit / 64 Bit*  |
+
+(*Quanten-Sicherheits-Niveau für Hash-basierte Verfahren ist
+Gegenstand laufender Diskussion; die Werte sind Standardannahmen.)
+
+Konsequenz für die Interpretation: der Performance-Vergleich vergleicht
+keine "äquivalent sicheren" Parameter. Ein Vergleich auf identischem
+Sicherheitsniveau (z. B. alle auf Level 3) würde SLH-DSA und XMSS in
+**größere** Parameter-Sets zwingen, was die qualitative Aussage
+(ML-DSA klar am schnellsten in sign, SLH-DSA-sign mit Abstand am
+langsamsten, XMSS-keygen am teuersten) **verstärkt statt verändert**.
+
+Dieser Punkt muss in der Ausarbeitung explizit erwähnt werden — sonst
+greift ihn ein aufmerksamer Leser an.
+
+### 6.4 liboqs-Konventionen, die in der Arbeit erwähnt werden sollten
 
 - liboqs hat **stateful Sigs standardmäßig deaktiviert**. Die
   HAZARDOUS-Flags müssen explizit gesetzt werden — eine
@@ -390,24 +475,21 @@ In der Ausarbeitung erwähnen:
   als "allokiert" gezählt. Funktional ohne Konsequenz, aber in der
   Arbeit erwähnen, um Off-by-One-Diskussionen vorzubeugen
 
-### 6.3 Was die Performance-Zahlen *nicht* zeigen
+### 6.5 Was die Performance-Zahlen *nicht* zeigen
 
-- Memory-Footprint wird nicht aussagekräftig gemessen (tracemalloc
-  sieht nur Python-Heap, nicht C-Heap). In der Ausarbeitung
-  entsprechend einordnen
+- **Kein Memory-Footprint:** `tracemalloc` sieht nur den Python-Heap,
+  liboqs alloziert in C. Eine solche Messung wäre eine Untergrenze
+  ohne Vergleichswert — wir verzichten deshalb bewusst darauf,
+  Memory zu reporten (im Code dokumentiert in `metrics.py`)
 - Wir messen nicht mit verschiedenen Nachrichtengrößen — bei
   Signaturverfahren in der Regel irrelevant (intern wird gehasht), aber
   ein möglicher Diskussionspunkt
 - Multi-Threading-Verhalten und Skalierung sind nicht untersucht
+- WOTS+-Forgery wird theoretisch referenziert (Buchmann/Dahmen/Hülsing
+  2011), aber nicht praktisch konstruiert — Begründung im Modul-
+  Docstring von `demo02_reuse_attack.py`
 
-### 6.4 Begründung der Parameter-Sets
-
-Eine Variante pro Algorithmus reicht für den qualitativen Vergleich:
-- **ML-DSA-65** als Mittelweg (NIST Level 3)
-- **SLH-DSA-SHA2-128f** als gängiger Vergleichspunkt in der Literatur
-- **XMSS-SHA2_10_256** als kleinstes Set — keygen sonst minutenlang
-
-### 6.5 Demo-Skripte als ausführbarer Belegtext
+### 6.6 Demo-Skripte als ausführbarer Belegtext
 
 Die drei Statefulness-Demos sind nicht "Spielereien", sondern bilden
 den argumentativen Kern: jede Demo entspricht einer These der
@@ -418,6 +500,25 @@ Ausarbeitung.
 | Demo 2 | Reuse ist unmittelbare Folge eines SK-Snapshots |
 | Demo 3 | Standard-Backup-Praxis erzeugt Reuse |
 | Demo 4 | Klassische HA-Patterns sind inkompatibel mit Stateful-Sigs |
+
+### 6.7 Limitations-Block für die Ausarbeitung
+
+Folgende Limitationen sollten in der Ausarbeitung **explizit benannt**
+werden — wer sie verschweigt und ein Reviewer findet sie, verliert
+Punkte; wer sie selbst adressiert, gewinnt methodische Glaubwürdigkeit:
+
+1. Single-Parameterset pro Algorithmus (siehe 6.2)
+2. Ungleiche NIST-Security-Level beim Performance-Vergleich (siehe 6.3)
+3. Kein Memory-Reporting (methodisch nicht messbar mit Python-
+   Bordmitteln, siehe 6.5)
+4. WOTS+-Forgery nur referenziert, nicht praktisch konstruiert
+   (siehe Modul-Docstring von Demo 2)
+5. Demo 4 Scenario A simuliert den Endzustand einer Race Condition
+   deterministisch, nicht die Race selbst (im Modul-Docstring
+   und im Live-Output explizit gemacht)
+6. liboqs-python aus `main`-Branch statt aus pinnable Release-Tag
+   (kein kompatibler Tag verfügbar; Commit-Hash wird im Setup-Script
+   ausgegeben)
 
 ---
 
@@ -457,7 +558,7 @@ Kein Hang, sondern Wartezeit auf das erste XMSS-keygen
 ### Pool-Größe in Tests ist 1023 statt 1024
 
 Das ist eine liboqs-Konvention, kein Bug. Der Test akzeptiert beide
-Werte. Siehe Methodische Notizen oben.
+Werte. Siehe Methodische Notizen oben (6.4).
 
 ---
 

@@ -16,6 +16,10 @@ WICHTIG fuer XMSS:
     iterations=100 und 2^10=1024 verfuegbaren Indizes ist das
     unkritisch. Pro Lauf wird ein frischer Key erzeugt, der State wird
     nach jedem sign() richtig weitergereicht.
+
+Bewusste Auslassung - Memory-Footprint:
+    Wir reporten keinen Memory-Verbrauch. Begruendung siehe
+    src/benchmark/metrics.py.
 """
 from __future__ import annotations
 import csv
@@ -126,7 +130,6 @@ def write_summary_csv(measurements: list[Measurement], path: Path) -> None:
         w.writerow([
             "algorithm", "operation", "iterations",
             "median_ms", "mean_ms", "stdev_ms", "min_ms", "max_ms",
-            "peak_memory_bytes",
         ])
         for m in measurements:
             w.writerow([
@@ -136,7 +139,6 @@ def write_summary_csv(measurements: list[Measurement], path: Path) -> None:
                 f"{m.stdev_ms:.6f}",
                 f"{m.min_ms:.6f}",
                 f"{m.max_ms:.6f}",
-                m.peak_memory_bytes,
             ])
     print(f"  -> {path}")
 

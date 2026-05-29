@@ -16,6 +16,18 @@ Wir simulieren zwei realistische Szenarien:
               Standby-Knoten uebernimmt nach Failover, hat aber
               einen aelteren Stand des SK.
 
+Methodischer Hinweis zu Scenario A:
+    Wir reproduzieren KEINE echte Race Condition (die waere
+    nicht-deterministisch und unzuverlaessig zu zeigen). Stattdessen
+    konstruieren wir den deterministisch erzeugbaren ENDZUSTAND, den
+    eine verlorene Read-Modify-Write-Sequenz hinterlassen wuerde:
+    beide Knoten haben unabhaengig vom selben SK-Snapshot signiert,
+    bevor einer von ihnen seinen aktualisierten Stand zurueckschreibt.
+    Das Beobachtungs-Ergebnis ist identisch mit dem einer echten Race;
+    der Unterschied liegt nur im Zustandekommen. Diese Vereinfachung
+    macht die Demo reproduzierbar, ohne die kryptographische Aussage
+    zu veraendern.
+
 Aufruf:
     python -m src.stateful_demo.demo04_multinode_failover
 """
@@ -52,16 +64,23 @@ def main():
         File-Locks auf NFS unzuverlaessig sind und ein Read-Modify-
         Write hier kryptographische Sicherheit kostet.
     """)
+    explain("""
+        Methodisch: wir loesen die Race nicht aus, sondern stellen ihren
+        Endzustand deterministisch her - beide Knoten signieren vom
+        gleichen SK-Snapshot. Das entspricht exakt der Beobachtung, die
+        ein Operator nach einer fehlgeschlagenen Read-Modify-Write-
+        Sequenz machen wuerde.
+    """)
 
     sk_shared = kp.secret_key
     initial_idx = 1024 - scheme.remaining_signatures(sk_shared)
     info(f"Beide Knoten lesen SK ein (sha256={fingerprint(sk_shared)})")
     info(f"Index laut Filesystem: {initial_idx}")
 
-    info("\n  Wir simulieren das Resultat einer Race Condition: beide")
-    info("  Knoten signieren von demselben SK-Snapshot, was dem")
-    info("  Endzustand einer fehlgeschlagenen Read-Modify-Write-Sequenz")
-    info("  entspricht.")
+    info("\n  Konstruktion des Race-Endzustands:")
+    info("  Beide Knoten signieren vom SELBEN SK-Snapshot - so als waere")
+    info("  zwischen ihren Read- und Write-Operationen kein Lock gehalten")
+    info("  worden.")
     msg_node1 = b"Node1: process payment $1000"
     msg_node2 = b"Node2: process payment $50"
 

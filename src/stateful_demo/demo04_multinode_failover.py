@@ -73,7 +73,11 @@ def main():
     """)
 
     sk_shared = kp.secret_key
-    initial_idx = 1024 - scheme.remaining_signatures(sk_shared)
+    # liboqs zaehlt den initialen Index als 'allokiert' mit (1023 statt
+    # 1024). Wir merken uns den initialen Pool-Wert, statt die Konstante
+    # 1024 zu nutzen - so bleibt die Index-Anzeige korrekt (vgl. Demo 3).
+    INITIAL_POOL = scheme.remaining_signatures(sk_shared)
+    initial_idx = INITIAL_POOL - scheme.remaining_signatures(sk_shared)
     info(f"Beide Knoten lesen SK ein (sha256={fingerprint(sk_shared)})")
     info(f"Index laut Filesystem: {initial_idx}")
 

@@ -38,7 +38,12 @@ def main():
     kp = scheme.keygen()
     show_bytes("Public Key", kp.public_key)
     show_bytes("Secret Key (initial)", kp.secret_key, show_first=24)
-    info(f"Verbleibende Signaturen: {scheme.remaining_signatures(kp.secret_key)}")
+
+    # liboqs zaehlt den initialen Index als 'allokiert' mit (1023 statt
+    # 1024). Wir merken uns den initialen Pool-Wert, statt die Konstante
+    # 1024 zu nutzen - so bleibt 'Verbrauchte Indizes' korrekt (vgl. Demo 3).
+    INITIAL_POOL = scheme.remaining_signatures(kp.secret_key)
+    info(f"Verbleibende Signaturen: {INITIAL_POOL}")
 
     # Wir signieren drei verschiedene Nachrichten und beobachten den State.
     section("Drei Signaturen, drei verschiedene States")
@@ -94,7 +99,7 @@ def main():
     section("Zusammenfassung")
     final_remaining = scheme.remaining_signatures(sk)
     info(f"Verbleibende Signaturen mit diesem Key: {final_remaining}")
-    info(f"Verbrauchte Indizes:                    {1024 - final_remaining}")
+    info(f"Verbrauchte Indizes:                    {INITIAL_POOL - final_remaining}")
 
     takeaway("""
         Der State ist NICHT der Secret Key allein, sondern der

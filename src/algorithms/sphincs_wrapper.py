@@ -1,5 +1,5 @@
 """
-SLH-DSA Wrapper (FIPS 205, frueher CRYSTALS-SPHINCS+).
+SLH-DSA Wrapper (FIPS 205, frueher SPHINCS+).
 
 Stateless Hash-Based Signatures - der "sichere Bruder" von XMSS.
 Im Gegensatz zu XMSS muss kein State verwaltet werden, dafuer sind

@@ -67,11 +67,13 @@ pq-bench/
 │   │   ├── metrics.py           #   Mess-Mechanik
 │   │   └── runner.py            #   Orchestrierung + CSV-Output
 │   ├── stateful_demo/           # XMSS-Statefulness-Demos
+│   │   ├── demo01_index_progression.py
 │   │   ├── demo02_reuse_attack.py
 │   │   ├── demo03_backup_pitfall.py
 │   │   ├── demo04_multinode_failover.py
 │   │   └── run_all.py
 │   ├── run_benchmark.py         # Entry-Point Benchmark
+│   ├── env_info.py              # Hardware/OS-Info für Ausarbeitung
 │   └── smoke_test.py            # Roundtrip-Check
 ├── tests/                       # 79 Tests, alle grün
 │   ├── conftest.py
@@ -267,12 +269,13 @@ Laufzeit: ~1–3 Minuten.
 Einzeln:
 
 ```bash
+python -m src.stateful_demo.demo01_index_progression
 python -m src.stateful_demo.demo02_reuse_attack
 python -m src.stateful_demo.demo03_backup_pitfall
 python -m src.stateful_demo.demo04_multinode_failover
 ```
 
-Alle drei am Stück:
+Alle vier am Stück:
 
 ```bash
 python -m src.stateful_demo.run_all
@@ -281,6 +284,16 @@ python -m src.stateful_demo.run_all
 Diese Programme sind didaktisch gestaltet (Banner, Sections, farbige
 Hinweise). Sie eignen sich direkt als Live-Demo in der Präsentation und
 als Screenshot-Quelle für die Ausarbeitung.
+
+### 4.4 Umgebungs-Info für die Ausarbeitung erfassen
+
+```bash
+python -m src.env_info
+```
+
+Gibt CPU, Kerne, RAM, OS, Python- und liboqs-Versionen aus — die
+Ausgabe kann direkt in den Reproduzierbarkeits-Abschnitt der
+Ausarbeitung übernommen werden (siehe 6.1).
 
 ---
 
@@ -308,6 +321,11 @@ Mess-Methodik im Detail:
 - Warmup-Iterationen werden verworfen (kalter Cache, Branch-Predictor)
 - Median als robuste Hauptmetrik (gegen GC-Pausen), Mean und Stdev als
   Nebenmetriken
+- **Wrapper-Overhead:** jeder sign()/verify()-Aufruf erzeugt einen
+  frischen oqs-Kontext inkl. Secret-Key-Import. Gemessen wird also
+  Wrapper + Import + Operation. Der Overhead ist über alle drei
+  Verfahren konsistent (Vergleich bleibt fair), die Absolutwerte sind
+  aber nach oben verzerrt — siehe Limitation 7 in 6.7.
 - **Kein Memory-Footprint:** `tracemalloc` würde nur den Python-Heap
   sehen, nicht die in C allozierten Hash-Bäume und Schlüsselstrukturen.
   Eine solche Messung wäre methodisch irreführend; wir verzichten
@@ -317,7 +335,20 @@ Mess-Methodik im Detail:
 ergeben die "Performance-Tabelle" und "Größen-Tabelle" in der
 Ausarbeitung.
 
-### 5.3 Demo 2: Reuse-Attack (`demo02_reuse_attack.py`)
+### 5.3 Demo 1: Index-Progression (`demo01_index_progression.py`)
+
+Der didaktische Einstieg in die Statefulness-Thematik:
+- Jede Signatur verbraucht genau einen Index
+- Der Secret Key verändert sich nach jedem sign() (Fingerprints)
+- Der Public Key bleibt konstant
+- Der Pool ist endlich und nicht regenerierbar
+
+Demo 1 etabliert den Grundmechanismus, auf dem die Demos 2–4 aufbauen.
+
+**Screenshot-Idee:** die drei Iterationen mit "SK vor Sign / SK nach
+Sign" — zeigt visuell, dass der State bei jedem Signieren wandert.
+
+### 5.4 Demo 2: Reuse-Attack (`demo02_reuse_attack.py`)
 
 Zeigt das Grundproblem abstrakt:
 - Schlüssel erzeugen, Snapshot speichern
@@ -336,7 +367,7 @@ referenziert und seine bewusste Auslassung begründet.
 **Screenshot-Idee:** die Stelle "BEIDE Signaturen verwenden denselben
 Index 0" — das ist der visuell stärkste Beleg des Reuse-Problems.
 
-### 5.4 Demo 3: Backup-Falle (`demo03_backup_pitfall.py`)
+### 5.5 Demo 3: Backup-Falle (`demo03_backup_pitfall.py`)
 
 Realistisches Operations-Szenario:
 - Audit-Log-Anwendung über zwei "Tage"
@@ -350,7 +381,7 @@ emotional packendste Demo, weil sie zeigt: kein Programmierfehler, kein
 fahrlässiger Admin — Standard-Operations-Praxis führt direkt in den
 Reuse.
 
-### 5.5 Demo 4: Multi-Node-Failover (`demo04_multinode_failover.py`)
+### 5.6 Demo 4: Multi-Node-Failover (`demo04_multinode_failover.py`)
 
 Zwei Szenarien:
 - Active-Active mit Shared Storage (Race Condition)
@@ -369,7 +400,7 @@ Output explizit.
 Insgesamt zeigt die Demo: Statefulness ist mit klassischen
 HA-Patterns strukturell inkompatibel.
 
-### 5.6 Tests (`tests/`)
+### 5.7 Tests (`tests/`)
 
 79 Tests in vier Modulen:
 - `test_wrappers_common.py` — parametrisiert über alle drei
@@ -403,7 +434,8 @@ Alle Messungen sind reproduzierbar:
 - Median statt Mean → robust gegen Ausreißer
 - Warmup eliminiert Cold-Cache-Effekte
 
-In der Ausarbeitung erwähnen:
+In der Ausarbeitung erwähnen (Ausgabe von `python -m src.env_info`
+direkt übernehmbar):
 - Hardware-Spezifikation (CPU, RAM)
 - Betriebssystem (WSL2 / Ubuntu 22.04)
 - liboqs-Version (0.15.0)
@@ -477,6 +509,12 @@ greift ihn ein aufmerksamer Leser an.
 
 ### 6.5 Was die Performance-Zahlen *nicht* zeigen
 
+- **Wrapper-Overhead enthalten:** jeder sign()/verify()-Aufruf erzeugt
+  einen frischen oqs-Kontext inkl. Secret-Key-Import. Gemessen wird
+  Wrapper + Import + Operation, nicht die reine Krypto-Operation. Da
+  alle drei Wrapper demselben Muster folgen, bleibt der *relative*
+  Vergleich fair; die Absolutwerte sind aber nach oben verzerrt — bei
+  XMSS potenziell stärker, weil der Key-Import dort nicht trivial ist
 - **Kein Memory-Footprint:** `tracemalloc` sieht nur den Python-Heap,
   liboqs alloziert in C. Eine solche Messung wäre eine Untergrenze
   ohne Vergleichswert — wir verzichten deshalb bewusst darauf,
@@ -491,12 +529,13 @@ greift ihn ein aufmerksamer Leser an.
 
 ### 6.6 Demo-Skripte als ausführbarer Belegtext
 
-Die drei Statefulness-Demos sind nicht "Spielereien", sondern bilden
+Die vier Statefulness-Demos sind nicht "Spielereien", sondern bilden
 den argumentativen Kern: jede Demo entspricht einer These der
 Ausarbeitung.
 
 | Demo | These |
 |---|---|
+| Demo 1 | Der Schlüssel selbst ist State: jede Signatur verbraucht genau einen Index |
 | Demo 2 | Reuse ist unmittelbare Folge eines SK-Snapshots |
 | Demo 3 | Standard-Backup-Praxis erzeugt Reuse |
 | Demo 4 | Klassische HA-Patterns sind inkompatibel mit Stateful-Sigs |
@@ -519,6 +558,12 @@ Punkte; wer sie selbst adressiert, gewinnt methodische Glaubwürdigkeit:
 6. liboqs-python aus `main`-Branch statt aus pinnable Release-Tag
    (kein kompatibler Tag verfügbar; Commit-Hash wird im Setup-Script
    ausgegeben)
+7. Gemessene Laufzeiten enthalten Python-Wrapper- und
+   Key-Import-Overhead (pro Aufruf wird ein frischer oqs-Kontext
+   erzeugt). Der Overhead ist über alle drei Verfahren konsistent,
+   der relative Vergleich bleibt damit gültig; die Absolutwerte sind
+   jedoch Obergrenzen und nicht direkt mit Messungen vergleichbar,
+   die die C-API direkt timen (siehe 6.5)
 
 ---
 
@@ -568,7 +613,7 @@ Werte. Siehe Methodische Notizen oben (6.4).
 
 - **liboqs** (Open Quantum Safe), MIT-Lizenz
 - **liboqs-python**, MIT-Lizenz
-- **pandas, pytest, tabulate** über pip, jeweils eigene Lizenzen
+- **pandas, pytest, tabulate, psutil** über pip, jeweils eigene Lizenzen
 
 ### Kryptographische Standards
 
@@ -597,7 +642,7 @@ Werte. Siehe Methodische Notizen oben (6.4).
 
 - [x] Schritt 1: Projekt-Skelett, Wrapper, Smoke-Test
 - [x] Schritt 2: Benchmark-Runner mit CSV-Output
-- [x] Schritt 3: XMSS-Statefulness-Demos (3 Demos)
+- [x] Schritt 3: XMSS-Statefulness-Demos (4 Demos)
 - [x] Schritt 4: HSM-Diskussion (`docs/stateful_hsm_discussion.md`)
 - [x] Schritt 5: Test-Suite (79 Tests, alle grün)
 - [ ] Schritt 6: Ausarbeitung

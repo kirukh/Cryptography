@@ -12,10 +12,21 @@ Schreibt drei CSVs:
 3. results_sizes.csv: PK-, SK- und Signaturgroessen pro Algorithmus.
 
 WICHTIG fuer XMSS:
-    Wir verbrauchen pro sign-Benchmark <iterations> Indizes. Bei
-    iterations=100 und 2^10=1024 verfuegbaren Indizes ist das
-    unkritisch. Pro Lauf wird ein frischer Key erzeugt, der State wird
-    nach jedem sign() richtig weitergereicht.
+    Wir verbrauchen pro sign-Benchmark iterations + warmup + 1 Indizes
+    (Warmup-Signaturen und die Referenz-Signatur fuer den
+    verify-Benchmark mitgezaehlt). Bei den Defaults sind das
+    100 + 5 + 1 = 106 von 1023 verfuegbaren Indizes - unkritisch.
+    Pro Lauf wird ein frischer Key erzeugt, der State wird nach jedem
+    sign() richtig weitergereicht.
+
+Methodischer Hinweis - Wrapper-Overhead:
+    Jeder sign()/verify()-Aufruf erzeugt einen frischen
+    oqs-Signature-Kontext inklusive Secret-Key-Import. Gemessen wird
+    also Wrapper + Key-Import + Operation, nicht die reine
+    Krypto-Operation. Der Overhead ist ueber alle drei Verfahren
+    konsistent (der Vergleich bleibt fair), die Absolutwerte sind
+    aber nach oben verzerrt. In der Ausarbeitung als Limitation
+    benennen (siehe README, Abschnitt 6.7).
 
 Bewusste Auslassung - Memory-Footprint:
     Wir reporten keinen Memory-Verbrauch. Begruendung siehe

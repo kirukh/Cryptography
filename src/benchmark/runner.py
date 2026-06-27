@@ -1,26 +1,36 @@
 """
 Orchestriert die Benchmarks ueber alle drei Algorithmen.
 
-Schreibt ZWEI CSVs:
+Schreibt drei CSVs:
 
-1. results_summary.csv:
-       Eine Zeile pro (Algorithmus, Operation) mit aggregierten Metriken.
-       Geeignet fuer Bar-Charts, Tabellen in der Ausarbeitung.
+1. results_summary.csv: Eine Zeile pro (Algorithmus, Operation) mit
+   aggregierten Metriken. Geeignet fuer Tabellen in der Ausarbeitung.
 
-2. results_raw.csv:
-       Eine Zeile pro Einzelmessung. Geeignet fuer Box-Plots und
-       Verteilungsanalysen.
+2. results_raw.csv: Eine Zeile pro Einzelmessung. Geeignet fuer
+   Verteilungsanalysen.
 
-Plus eine Schluesselgroessen-Tabelle als drittes CSV:
-3. results_sizes.csv:
-       PK-, SK- und Signaturgroessen pro Algorithmus.
+3. results_sizes.csv: PK-, SK- und Signaturgroessen pro Algorithmus.
 
 WICHTIG fuer XMSS:
-    Wir verbrauchen pro sign-Benchmark <iterations> Indizes des Keys.
-    Bei iterations=100 und 2^10=1024 verfuegbaren Indizes ist das
-    unkritisch. Wir generieren pro Lauf einen frischen Key und nutzen
-    ihn dann komplett auf - der State wird nach jedem sign() richtig
-    weitergereicht.
+    Wir verbrauchen pro sign-Benchmark iterations + warmup + 1 Indizes
+    (Warmup-Signaturen und die Referenz-Signatur fuer den
+    verify-Benchmark mitgezaehlt). Bei den Defaults sind das
+    100 + 5 + 1 = 106 von 1023 verfuegbaren Indizes - unkritisch.
+    Pro Lauf wird ein frischer Key erzeugt, der State wird nach jedem
+    sign() richtig weitergereicht.
+
+Methodischer Hinweis - Wrapper-Overhead:
+    Jeder sign()/verify()-Aufruf erzeugt einen frischen
+    oqs-Signature-Kontext inklusive Secret-Key-Import. Gemessen wird
+    also Wrapper + Key-Import + Operation, nicht die reine
+    Krypto-Operation. Der Overhead ist ueber alle drei Verfahren
+    konsistent (der Vergleich bleibt fair), die Absolutwerte sind
+    aber nach oben verzerrt. In der Ausarbeitung als Limitation
+    benennen (siehe README, Abschnitt 6.7).
+
+Bewusste Auslassung - Memory-Footprint:
+    Wir reporten keinen Memory-Verbrauch. Begruendung siehe
+    src/benchmark/metrics.py.
 """
 from __future__ import annotations
 import csv
@@ -36,19 +46,14 @@ from src.algorithms import (
 from src.benchmark.metrics import Measurement, measure
 
 
-# Standard-Konfiguration fuer Schritt 2: kleiner Lauf mit Defaults.
 DEFAULT_SCHEMES_FACTORIES = [
-    ("ML-DSA-65",        lambda: MLDSAScheme("ML-DSA-65")),
+    ("ML-DSA-65",         lambda: MLDSAScheme("ML-DSA-65")),
     ("SLH-DSA-SHA2-128f", lambda: SLHDSAScheme("SLH-DSA-SHA2-128f")),
-    ("XMSS-SHA2_10_256", lambda: XMSSScheme("XMSS-SHA2_10_256")),
+    ("XMSS-SHA2_10_256",  lambda: XMSSScheme("XMSS-SHA2_10_256")),
 ]
 
-# Iterations-Defaults pro Operation.
-# SLH-DSA-Sign ist deutlich langsamer als ML-DSA-Sign, daher sind 100
-# Iterationen eine guter Kompromiss: bei ML-DSA noch schnell durch,
-# bei SLH-DSA-128f dauert das ~5-10 Sekunden insgesamt.
-# XMSS-Keygen kann je nach Maschine schon mehrere Sekunden dauern
-# (Build des Hash-Trees), darum dort weniger Iterationen.
+# Iterations-Defaults pro Operation. XMSS-Keygen kann mehrere Sekunden
+# dauern (Build des Hash-Trees), darum dort weniger Iterationen.
 DEFAULT_ITERS = {
     "keygen": {"iterations": 20,  "warmup": 2},
     "sign":   {"iterations": 100, "warmup": 5},
@@ -62,11 +67,7 @@ def benchmark_scheme(
     scheme: SignatureScheme,
     iters: dict | None = None,
 ) -> tuple[list[Measurement], dict]:
-    """Benchmarkt einen einzelnen Algorithmus.
-
-    Returns:
-        (measurements, sizes_dict)
-    """
+    """Benchmarkt einen einzelnen Algorithmus."""
     iters = iters or DEFAULT_ITERS
 
     print(f"\n--- Benchmark: {scheme.name} ---")
@@ -84,7 +85,8 @@ def benchmark_scheme(
     measurements: list[Measurement] = []
 
     # 1. KEYGEN
-    print(f"  keygen ({iters['keygen']['iterations']} iter)... ", end="", flush=True)
+    print(f"  keygen ({iters['keygen']['iterations']} iter)... ",
+          end="", flush=True)
     m_keygen = measure(
         "keygen", scheme.name,
         fn=lambda: scheme.keygen(),
@@ -93,13 +95,10 @@ def benchmark_scheme(
     measurements.append(m_keygen)
     print(f"median={m_keygen.median_ms:.3f} ms")
 
-    # Wir brauchen ein Schluesselpaar fuer sign/verify-Benchmarks.
     kp = scheme.keygen()
     current_sk = kp.secret_key
 
-    # 2. SIGN
-    # Bei XMSS muss der State fortgeschrieben werden. Wir verwalten
-    # einen mutierbaren Container, damit die Closure den State sieht.
+    # 2. SIGN - bei XMSS muss der State fortgeschrieben werden.
     sk_state = {"sk": current_sk}
 
     def do_sign():
@@ -107,7 +106,8 @@ def benchmark_scheme(
         sk_state["sk"] = new_sk
         return sig
 
-    print(f"  sign   ({iters['sign']['iterations']} iter)... ", end="", flush=True)
+    print(f"  sign   ({iters['sign']['iterations']} iter)... ",
+          end="", flush=True)
     m_sign = measure(
         "sign", scheme.name,
         fn=do_sign,
@@ -116,13 +116,14 @@ def benchmark_scheme(
     measurements.append(m_sign)
     print(f"median={m_sign.median_ms:.3f} ms")
 
-    # 3. VERIFY (stateless, wir nehmen eine repraesentative Signatur)
+    # 3. VERIFY
     sig_for_verify, sk_state["sk"] = scheme.sign(sk_state["sk"], MESSAGE)
 
     def do_verify():
         return scheme.verify(kp.public_key, MESSAGE, sig_for_verify)
 
-    print(f"  verify ({iters['verify']['iterations']} iter)... ", end="", flush=True)
+    print(f"  verify ({iters['verify']['iterations']} iter)... ",
+          end="", flush=True)
     m_verify = measure(
         "verify", scheme.name,
         fn=do_verify,
@@ -135,13 +136,11 @@ def benchmark_scheme(
 
 
 def write_summary_csv(measurements: list[Measurement], path: Path) -> None:
-    """Schreibt aggregierte Metriken: eine Zeile pro (Algo, Operation)."""
     with path.open("w", newline="") as f:
         w = csv.writer(f)
         w.writerow([
             "algorithm", "operation", "iterations",
             "median_ms", "mean_ms", "stdev_ms", "min_ms", "max_ms",
-            "peak_memory_bytes",
         ])
         for m in measurements:
             w.writerow([
@@ -151,13 +150,11 @@ def write_summary_csv(measurements: list[Measurement], path: Path) -> None:
                 f"{m.stdev_ms:.6f}",
                 f"{m.min_ms:.6f}",
                 f"{m.max_ms:.6f}",
-                m.peak_memory_bytes,
             ])
     print(f"  -> {path}")
 
 
 def write_raw_csv(measurements: list[Measurement], path: Path) -> None:
-    """Schreibt jede Einzelmessung - Basis fuer Box-Plots."""
     with path.open("w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["algorithm", "operation", "iteration_index", "duration_ns"])
@@ -168,7 +165,6 @@ def write_raw_csv(measurements: list[Measurement], path: Path) -> None:
 
 
 def write_sizes_csv(sizes_list: list[dict], path: Path) -> None:
-    """Schreibt PK/SK/Sig-Groessen."""
     with path.open("w", newline="") as f:
         w = csv.writer(f)
         w.writerow([
@@ -178,9 +174,55 @@ def write_sizes_csv(sizes_list: list[dict], path: Path) -> None:
         for s in sizes_list:
             w.writerow([
                 s["algorithm"], s["is_stateful"],
-                s["public_key_bytes"], s["secret_key_bytes"], s["signature_bytes"],
+                s["public_key_bytes"], s["secret_key_bytes"],
+                s["signature_bytes"],
             ])
     print(f"  -> {path}")
+
+
+def print_summary_table(measurements: list[Measurement],
+                        sizes_list: list[dict]) -> None:
+    """Druckt eine konsolidierte Tabelle - bereit zum Abtippen in die
+    Ausarbeitung.
+    """
+    try:
+        from tabulate import tabulate
+    except ImportError:
+        return  # tabulate ist optional fuer dieses Komfortfeature
+
+    print("\n" + "=" * 60)
+    print("Performance-Tabelle (Median in ms):")
+    print("=" * 60)
+
+    rows = []
+    by_algo = {}
+    for m in measurements:
+        by_algo.setdefault(m.algorithm, {})[m.operation] = m.median_ms
+
+    for algo, ops in by_algo.items():
+        rows.append([
+            algo,
+            f"{ops.get('keygen', 0):.3f}",
+            f"{ops.get('sign', 0):.3f}",
+            f"{ops.get('verify', 0):.3f}",
+        ])
+    print(tabulate(rows,
+                   headers=["Algorithmus", "keygen", "sign", "verify"],
+                   tablefmt="github"))
+
+    print("\n" + "=" * 60)
+    print("Groessen-Tabelle (in Bytes):")
+    print("=" * 60)
+    size_rows = [[
+        s["algorithm"],
+        "ja" if s["is_stateful"] else "nein",
+        s["public_key_bytes"],
+        s["secret_key_bytes"],
+        s["signature_bytes"],
+    ] for s in sizes_list]
+    print(tabulate(size_rows,
+                   headers=["Algorithmus", "stateful", "PK", "SK", "Sig"],
+                   tablefmt="github"))
 
 
 def run_full_benchmark(
@@ -222,4 +264,6 @@ def run_full_benchmark(
     write_summary_csv(all_measurements, out / "results_summary.csv")
     write_raw_csv(all_measurements, out / "results_raw.csv")
     write_sizes_csv(all_sizes, out / "results_sizes.csv")
+
+    print_summary_table(all_measurements, all_sizes)
     print("\nFertig.")

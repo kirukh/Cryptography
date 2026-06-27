@@ -1,5 +1,5 @@
 """
-Fuehrt alle vier Statefulness-Demos hintereinander aus.
+Fuehrt alle Statefulness-Demos hintereinander aus.
 
 Aufruf:
     python -m src.stateful_demo.run_all
@@ -14,7 +14,7 @@ from src.stateful_demo import (
 
 def main():
     print("\n" + "#" * 70)
-    print("#  XMSS Statefulness - vollstaendige Demo-Suite")
+    print("#  XMSS Statefulness - Demo-Suite")
     print("#" * 70)
 
     demo01_index_progression.main()
